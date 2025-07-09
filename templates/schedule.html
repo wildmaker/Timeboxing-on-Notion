@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}批量安排日程 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">批量安排日程</h2>
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">智能安排任务日程</h5>
+                <p class="card-text mb-4">
+                    系统将根据任务优先级、预估时间和父子关系自动安排今日任务的执行时间。
+                    仅处理"进行中"状态的任务，高优先级任务将被优先安排，父子任务将被合理分组，系统还会在长时间任务后自动插入休息时间。
+                </p>
+
+                {% if config %}
+                    <!-- 当前配置信息 -->
+                    <div class="alert alert-info mb-4">
+                        <h6><i class="fas fa-database"></i> 当前配置</h6>
+                        <p><strong>数据库ID:</strong> {{ config.database_id }}</p>
+                        <p class="mb-0"><strong>映射完成度:</strong> 
+                            {% if config.is_mapping_complete_for_scheduling() %}
+                                <span class="badge bg-success">已完成</span>
+                            {% else %}
+                                <span class="badge bg-warning">未完成</span>
+                                <a href="{{ url_for('property_mapping') }}" class="btn btn-sm btn-warning ms-2">配置映射</a>
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <!-- 待排程任务显示区域 -->
+                    <div id="pending-tasks-section" style="display: none;" class="mb-4">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">待排程任务列表</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="pending-tasks-loading" class="text-center" style="display: none;">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2">正在获取待排程任务...</p>
+                                </div>
+                                <div id="pending-tasks-content"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('schedule_tasks') }}" class="mt-4">
+                        <div class="mb-3">
+                            <label for="start_time" class="form-label">起始时间</label>
+                            <input type="datetime-local" class="form-control" id="start_time" name="start_time" 
+                                   value="{{ default_start_time }}" required>
+                            <div class="form-text">设置任务日程安排的起始时间（默认为当前时间后15分钟）</div>
+                        </div>
+                        
+                        <div class="mb-4 form-check">
+                            <input class="form-check-input" type="checkbox" id="include_breaks" name="include_breaks" checked>
+                            <label class="form-check-label" for="include_breaks">
+                                在长时间任务（45分钟以上）后自动插入15分钟休息
+                            </label>
+                        </div>
+                        
+                        <div class="d-flex gap-2 justify-content-between">
+                            <button type="button" class="btn btn-outline-info" onclick="loadPendingTasks()">
+                                <i class="fas fa-list"></i> 查看待排程任务
+                            </button>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-outline-primary" onclick="previewSchedule()">
+                                    <i class="fas fa-eye"></i> 预览日程安排
+                                </button>
+                                <button type="submit" class="btn btn-primary" id="schedule-button">
+                                    <i class="fas fa-calendar-plus"></i> 直接安排并同步
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text text-center mt-2">
+                            <strong>推荐流程：</strong>先预览日程安排 → 确认无误后再同步到Notion
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <h6>未找到配置信息</h6>
+                        <p>您需要先配置 Notion 连接和数据库才能使用批量安排日程功能。</p>
+                        <a href="{{ url_for('connect') }}" class="btn btn-primary">开始配置</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h4 class="mb-0">智能排程原理</h4>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    <li class="list-group-item">
+                        <strong>任务状态过滤</strong>
+                        <p class="mb-0">系统仅处理"进行中"状态的任务进行排程</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>优先级排序</strong>
+                        <p class="mb-0">系统会按照优先级从高到低（P0 → P4）顺序安排任务</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>任务分层处理</strong>
+                        <p class="mb-0">独立任务和父任务被优先安排，子任务被合理安排在父任务的时间跨度内</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>时间分配</strong>
+                        <p class="mb-0">根据任务的预估时间计算开始和结束时间，创建完整的日程表</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>休息管理</strong>
+                        <p class="mb-0">系统在连续工作45分钟或更长时间后自动插入15分钟休息</p>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 全局函数：预览日程安排
+function previewSchedule() {
+    const form = document.querySelector('form[action="{{ url_for("schedule_tasks") }}"]');
+    const formData = new FormData(form);
+    
+    // 添加预览标志
+    formData.append('preview', 'true');
+    
+    // 禁用按钮防止重复点击
+    const previewBtn = document.querySelector('button[onclick="previewSchedule()"]');
+    const originalText = previewBtn.innerHTML;
+    previewBtn.disabled = true;
+    previewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在生成预览...';
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (response.ok) {
+            // 如果是HTML响应（预览页面），则直接跳转
+            return response.text().then(html => {
+                // 创建新页面并显示
+                document.open();
+                document.write(html);
+                document.close();
+            });
+        } else {
+            throw new Error('预览失败');
+        }
+    })
+    .catch(error => {
+        alert('预览失败: ' + error.message);
+        console.error('Preview error:', error);
+    })
+    .finally(() => {
+        // 恢复按钮状态
+        previewBtn.disabled = false;
+        previewBtn.innerHTML = originalText;
+    });
+}
+
+// 全局函数：加载待排程任务
+function loadPendingTasks() {
+    const pendingTasksSection = document.getElementById('pending-tasks-section');
+    const pendingTasksLoading = document.getElementById('pending-tasks-loading');
+    const pendingTasksContent = document.getElementById('pending-tasks-content');
+    
+    pendingTasksSection.style.display = 'block';
+    pendingTasksLoading.style.display = 'block';
+    pendingTasksContent.innerHTML = '';
+    
+    fetch('/api/database/pending-tasks')
+        .then(response => response.json())
+        .then(data => {
+            pendingTasksLoading.style.display = 'none';
+            
+            if (data.success) {
+                displayPendingTasks(data);
+            } else {
+                pendingTasksContent.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>获取任务失败:</strong> ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            pendingTasksLoading.style.display = 'none';
+            pendingTasksContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>网络错误:</strong> ${error.message}
+                </div>
+            `;
+        });
+}
+
+function displayPendingTasks(data) {
+    const pendingTasksContent = document.getElementById('pending-tasks-content');
+    
+    if (data.total_tasks === 0) {
+        pendingTasksContent.innerHTML = `
+            <div class="alert alert-warning">
+                <h6>没有找到待排程任务</h6>
+                <p class="mb-0">当前数据库中没有符合条件的任务需要排程。请检查任务状态和属性映射配置。</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="alert alert-success">
+            <h6>找到 ${data.total_tasks} 个待排程任务</h6>
+            <p class="mb-0">预计总时间: ${data.total_estimated_time} 分钟</p>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>任务名称</th>
+                        <th>优先级</th>
+                        <th>预估时间</th>
+                        <th>子任务数</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    data.tasks.forEach(task => {
+        html += `
+            <tr>
+                <td>
+                    <strong>${task.title}</strong>
+                    ${task.has_children ? '<i class="fas fa-sitemap text-info ms-1" title="包含子任务"></i>' : ''}
+                </td>
+                <td><span class="badge bg-secondary">${task.priority}</span></td>
+                <td>${task.estimated_time} 分钟</td>
+                <td>${task.children_count}</td>
+            </tr>
+        `;
+        
+        // 显示子任务
+        if (task.children && task.children.length > 0) {
+            task.children.forEach(child => {
+                html += `
+                    <tr class="table-light">
+                        <td class="ps-4">
+                            <i class="fas fa-arrow-right text-muted"></i>
+                            ${child.title}
+                        </td>
+                        <td><span class="badge bg-light text-dark">${child.priority}</span></td>
+                        <td>${child.estimated_time} 分钟</td>
+                        <td>-</td>
+                    </tr>
+                `;
+            });
+        }
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    pendingTasksContent.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            const startTime = document.getElementById('start_time').value;
+            
+            if (!startTime) {
+                event.preventDefault();
+                alert('请设置起始时间');
+                return false;
+            }
+            
+            const scheduleButton = document.getElementById('schedule-button');
+            scheduleButton.disabled = true;
+            scheduleButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 安排中...';
+        });
+    }
+});
+</script>
+{% endblock %} 

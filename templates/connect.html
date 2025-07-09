@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}系统配置 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        
+        {% if current_config %}
+        <!-- 已有配置的显示 -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-check-circle"></i> 系统配置完成
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6>当前配置信息</h6>
+                        <p><strong>数据库ID:</strong> {{ current_config.database_id }}</p>
+                        <p><strong>最后更新:</strong> {{ format_datetime(current_config.updated_at) }}</p>
+                        <p><strong>映射完成度:</strong> 
+                            {% if current_config.is_mapping_complete_for_scheduling() %}
+                                <span class="badge bg-success">已完成</span>
+                            {% else %}
+                                <span class="badge bg-warning">未完成</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('property_mapping') }}" class="btn btn-primary">
+                                <i class="fas fa-cog"></i> 配置字段映射
+                            </a>
+                            <a href="{{ url_for('validate_mapping') }}" class="btn btn-outline-info">
+                                <i class="fas fa-check-double"></i> 验证映射
+                            </a>
+                            <form method="POST" action="{{ url_for('fix_mapping') }}" style="display: inline;">
+                                <button type="submit" class="btn btn-outline-success" onclick="return confirm('确定要自动修复属性映射吗？这将把所有属性名称转换为对应的ID。')">
+                                    <i class="fas fa-wrench"></i> 修复映射
+                                </button>
+                            </form>
+                            <button type="button" class="btn btn-outline-warning" onclick="showReconfigForm()">
+                                <i class="fas fa-edit"></i> 重新配置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 配置表单 -->
+        <div class="card" id="config-form" {% if current_config %}style="display: none;"{% endif %}>
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-cog"></i> Notion 系统配置
+                </h4>
+            </div>
+            <div class="card-body">
+                <form id="main-config-form" method="POST" action="{{ url_for('connect') }}">
+                    
+                    <!-- Step 1: Token 输入 -->
+                    <div class="mb-4">
+                        <h5><i class="fas fa-key"></i> 1. Notion API Token</h5>
+                        <div class="input-group">
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="token" 
+                                   name="token" 
+                                   placeholder="secret_..." 
+                                   {% if current_config %}value="{{ current_config.token[:20] }}..."{% endif %}
+                                   required>
+                            <button type="button" class="btn btn-outline-primary" id="validate-token-btn">
+                                <i class="fas fa-check"></i> 验证
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            在 <a href="https://www.notion.so/my-integrations" target="_blank">Notion 开发者页面</a> 创建 Integration 并获取 Token
+                        </div>
+                        
+                        <!-- Token 验证状态 -->
+                        <div id="token-status" class="mt-2" style="display: none;">
+                            <div id="token-loading" class="text-info" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i> 正在验证 Token...
+                            </div>
+                            <div id="token-success" class="text-success" style="display: none;">
+                                <i class="fas fa-check-circle"></i> Token 验证成功！
+                            </div>
+                            <div id="token-error" class="text-danger" style="display: none;">
+                                <i class="fas fa-times-circle"></i> <span id="token-error-message"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: 数据库选择 -->
+                    <div class="mb-4" id="database-section" style="display: none;">
+                        <h5><i class="fas fa-database"></i> 2. 选择数据库</h5>
+                        <div id="databases-loading" class="text-center" style="display: none;">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">正在获取数据库列表...</p>
+                        </div>
+                        <div id="databases-list"></div>
+                        <input type="hidden" id="database_id" name="database_id">
+                    </div>
+
+                    <!-- Step 3: 提交按钮 -->
+                    <div class="d-flex justify-content-between">
+                        {% if current_config %}
+                        <button type="button" class="btn btn-secondary" onclick="hideReconfigForm()">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                        {% else %}
+                        <div></div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-success" id="submit-config-btn" disabled>
+                            <i class="fas fa-save"></i> 
+                            {% if current_config %}更新配置{% else %}保存配置{% endif %}
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Notion Integration 创建指南 -->
+                <div class="mt-4">
+                    <details>
+                        <summary class="btn btn-link p-0">
+                            <i class="fas fa-question-circle"></i> 如何创建 Notion Integration？
+                        </summary>
+                        <div class="mt-2">
+                            <ol class="small">
+                                <li>访问 <a href="https://www.notion.so/my-integrations" target="_blank">Notion 开发者页面</a></li>
+                                <li>点击 "新建 Integration"</li>
+                                <li>给 Integration 起个名字（如 "任务管理助手"）</li>
+                                <li>选择关联的工作区</li>
+                                <li>复制生成的 "Internal Integration Token"</li>
+                                <li>在数据库页面中，点击 "..." → "添加连接" → 选择你的 Integration</li>
+                            </ol>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快捷操作区域 -->
+        {% if current_config %}
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-rocket"></i> 快捷操作
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{{ url_for('delay') }}" class="btn btn-outline-primary">
+                                <i class="fas fa-clock"></i><br>
+                                批量延迟任务
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            {% if current_config.is_mapping_complete_for_scheduling() %}
+                                <a href="{{ url_for('schedule') }}" class="btn btn-outline-success">
+                                    <i class="fas fa-calendar-alt"></i><br>
+                                    智能排程
+                                </a>
+                            {% else %}
+                                <button class="btn btn-outline-secondary" disabled>
+                                    <i class="fas fa-calendar-alt"></i><br>
+                                    智能排程<br>
+                                    <small>(需完成映射)</small>
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-info">
+                                <i class="fas fa-home"></i><br>
+                                返回首页
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentToken = '';
+let selectedDatabaseId = '';
+
+// 显示重新配置表单
+function showReconfigForm() {
+    document.getElementById('config-form').style.display = 'block';
+    // 清空之前的输入
+    document.getElementById('token').value = '';
+    resetValidationState();
+}
+
+// 隐藏重新配置表单
+function hideReconfigForm() {
+    document.getElementById('config-form').style.display = 'none';
+    resetValidationState();
+}
+
+// 重置验证状态
+function resetValidationState() {
+    currentToken = '';
+    selectedDatabaseId = '';
+    
+    // 隐藏所有状态
+    document.getElementById('token-status').style.display = 'none';
+    document.getElementById('database-section').style.display = 'none';
+    
+    // 重置按钮状态
+    document.getElementById('validate-token-btn').disabled = false;
+    document.getElementById('submit-config-btn').disabled = true;
+    
+    // 清空数据库选择
+    document.getElementById('database_id').value = '';
+    document.getElementById('databases-list').innerHTML = '';
+}
+
+// 验证Token
+function validateToken() {
+    const token = document.getElementById('token').value.trim();
+    if (!token) {
+        alert('请输入 Notion API Token');
+        return;
+    }
+    
+    const tokenStatus = document.getElementById('token-status');
+    const tokenLoading = document.getElementById('token-loading');
+    const tokenSuccess = document.getElementById('token-success');
+    const tokenError = document.getElementById('token-error');
+    const validateBtn = document.getElementById('validate-token-btn');
+    
+    // 显示加载状态
+    tokenStatus.style.display = 'block';
+    tokenLoading.style.display = 'block';
+    tokenSuccess.style.display = 'none';
+    tokenError.style.display = 'none';
+    validateBtn.disabled = true;
+    
+    // 发送验证请求
+    fetch('/api/validate-token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token: token })
+    })
+    .then(response => response.json())
+    .then(data => {
+        tokenLoading.style.display = 'none';
+        validateBtn.disabled = false;
+        
+        if (data.valid) {
+            // Token验证成功
+            currentToken = token;
+            tokenSuccess.style.display = 'block';
+            
+            // 显示数据库选择
+            showDatabaseSelection(data.databases);
+        } else {
+            // Token验证失败
+            tokenError.style.display = 'block';
+            document.getElementById('token-error-message').textContent = data.error || '验证失败';
+        }
+    })
+    .catch(error => {
+        tokenLoading.style.display = 'none';
+        validateBtn.disabled = false;
+        tokenError.style.display = 'block';
+        document.getElementById('token-error-message').textContent = '网络错误: ' + error.message;
+    });
+}
+
+// 显示数据库选择
+function showDatabaseSelection(databases) {
+    const databaseSection = document.getElementById('database-section');
+    const databasesList = document.getElementById('databases-list');
+    
+    databaseSection.style.display = 'block';
+    
+    if (!databases || databases.length === 0) {
+        databasesList.innerHTML = `
+            <div class="alert alert-warning">
+                <h6><i class="fas fa-exclamation-triangle"></i> 未找到可用数据库</h6>
+                <p class="mb-0">请确保已在 Notion 中创建数据库并将 Integration 连接到数据库页面</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="row">';
+    databases.forEach(db => {
+        const title = db.title && db.title.length > 0 ? 
+            db.title.map(t => t.plain_text).join('') : 
+            '未命名数据库';
+        
+        html += `
+            <div class="col-md-6 mb-3">
+                <div class="card database-card" style="cursor: pointer;" onclick="selectDatabase('${db.id}', '${title}')">
+                    <div class="card-body">
+                        <h6 class="card-title">${title}</h6>
+                        <p class="card-text small text-muted">ID: ${db.id}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    databasesList.innerHTML = html;
+}
+
+// 选择数据库
+function selectDatabase(databaseId, databaseTitle) {
+    selectedDatabaseId = databaseId;
+    
+    // 更新隐藏字段
+    document.getElementById('database_id').value = databaseId;
+    
+    // 更新视觉选择状态
+    document.querySelectorAll('.database-card').forEach(card => {
+        card.classList.remove('border-primary');
+        card.style.backgroundColor = '';
+    });
+    
+    event.target.closest('.database-card').classList.add('border-primary');
+    event.target.closest('.database-card').style.backgroundColor = '#e3f2fd';
+    
+    // 启用提交按钮
+    document.getElementById('submit-config-btn').disabled = false;
+}
+
+// 页面加载完成后绑定事件
+document.addEventListener('DOMContentLoaded', function() {
+    // Token验证按钮
+    document.getElementById('validate-token-btn').addEventListener('click', validateToken);
+    
+    // Token输入框回车验证
+    document.getElementById('token').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            validateToken();
+        }
+    });
+    
+    // 表单提交验证
+    document.getElementById('main-config-form').addEventListener('submit', function(e) {
+        if (!currentToken || !selectedDatabaseId) {
+            e.preventDefault();
+            alert('请先验证 Token 并选择数据库');
+            return false;
+        }
+        
+        // 确保隐藏字段有正确的值
+        document.getElementById('token').value = currentToken;
+        document.getElementById('database_id').value = selectedDatabaseId;
+    });
+});
+</script>
+{% endblock %}

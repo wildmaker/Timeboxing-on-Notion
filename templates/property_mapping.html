@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}属性映射配置 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h2 class="mb-0">属性映射配置</h2>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <small>数据库: {{ config.database_id }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-info-circle"></i> 配置说明</h6>
+                    <p class="mb-0">
+                        为了实现智能任务排程功能，需要将 Notion 数据库的属性字段映射到系统功能。
+                        请根据您的数据库结构选择对应的属性字段。
+                    </p>
+                </div>
+
+                <form method="POST" action="{{ url_for('property_mapping') }}" class="mt-4">
+                    <!-- 标题属性 -->
+                    <div class="mb-3">
+                        <label for="title_property" class="form-label">
+                            <i class="fas fa-heading text-primary"></i> 标题属性 <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="title_property" name="title_property" required>
+                            <option value="">-- 请选择标题属性 --</option>
+                            {% for prop_name, prop in title_properties.items() %}
+                            <option value="{{ prop_name }}" {% if mapping.title_property == prop_name %}selected{% endif %}>
+                                {{ prop_name }} 
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">选择表示任务标题的属性字段（必须）</div>
+                    </div>
+                    
+                    <!-- 优先级属性 -->
+                    <div class="mb-3">
+                        <label for="priority_property" class="form-label">
+                            <i class="fas fa-star text-warning"></i> 优先级属性
+                        </label>
+                        <select class="form-select" id="priority_property" name="priority_property">
+                            <option value="">-- 不使用优先级 --</option>
+                            {% for prop_name, prop in select_properties.items() %}
+                            <option value="{{ prop_name }}" {% if mapping.priority_property == prop_name %}selected{% endif %}>
+                                {{ prop_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">选择表示任务优先级的属性字段（选择类型，期望值为P0、P1、P2等）</div>
+                    </div>
+                    
+                    <!-- 预估时间属性 -->
+                    <div class="mb-3">
+                        <label for="estimated_time_property" class="form-label">
+                            <i class="fas fa-clock text-info"></i> 预估时间属性（分钟）
+                        </label>
+                        <select class="form-select" id="estimated_time_property" name="estimated_time_property">
+                            <option value="">-- 不使用预估时间 --</option>
+                            {% for prop_name, prop in number_properties.items() %}
+                            <option value="{{ prop_name }}" {% if mapping.estimated_time_property == prop_name %}selected{% endif %}>
+                                {{ prop_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">选择表示任务预估完成时间的属性字段（数字类型，单位为分钟）</div>
+                    </div>
+                    
+                    <!-- 任务状态属性 -->
+                    <div class="mb-3">
+                        <label for="status_property" class="form-label">
+                            <i class="fas fa-tasks text-success"></i> 任务状态属性
+                        </label>
+                        <select class="form-select" id="status_property" name="status_property">
+                            <option value="">-- 不使用任务状态过滤 --</option>
+                            {% for prop_name, prop in status_properties.items() %}
+                            <option value="{{ prop_name }}" {% if mapping.status_property == prop_name %}selected{% endif %}>
+                                {{ prop_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">选择表示任务状态的属性字段（"状态"类型）</div>
+                    </div>
+
+                    <!-- 关系属性 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="parent_task_property" class="form-label">
+                                    <i class="fas fa-sitemap text-secondary"></i> 父任务关系
+                                </label>
+                                <select class="form-select" id="parent_task_property" name="parent_task_property">
+                                    <option value="">-- 不使用父任务关系 --</option>
+                                    {% for prop_name, prop in relation_properties.items() %}
+                                    <option value="{{ prop_name }}" {% if mapping.parent_task_property == prop_name %}selected{% endif %}>
+                                        {{ prop_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="child_task_property" class="form-label">
+                                    <i class="fas fa-project-diagram text-secondary"></i> 子任务关系
+                                </label>
+                                <select class="form-select" id="child_task_property" name="child_task_property">
+                                    <option value="">-- 不使用子任务关系 --</option>
+                                    {% for prop_name, prop in relation_properties.items() %}
+                                    <option value="{{ prop_name }}" {% if mapping.child_task_property == prop_name %}selected{% endif %}>
+                                        {{ prop_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 时间盒字段配置 -->
+                    <div class="card mb-3 border-success">
+                        <div class="card-header bg-success text-white">
+                            <strong><i class="fas fa-calendar-alt"></i> 时间盒字段配置</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="timebox_start_property" class="form-label">开始时间属性</label>
+                                        <select class="form-select" id="timebox_start_property" name="timebox_start_property">
+                                            <option value="">-- 不使用开始时间 --</option>
+                                            {% for prop_name, prop in date_properties.items() %}
+                                            <option value="{{ prop_name }}" {% if mapping.timebox_start_property == prop_name %}selected{% endif %}>
+                                                {{ prop_name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="timebox_end_property" class="form-label">结束时间属性</label>
+                                        <select class="form-select" id="timebox_end_property" name="timebox_end_property">
+                                            <option value="">-- 不使用结束时间 --</option>
+                                            {% for prop_name, prop in date_properties.items() %}
+                                            <option value="{{ prop_name }}" {% if mapping.timebox_end_property == prop_name %}selected{% endif %}>
+                                                {{ prop_name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text">选择表示任务开始和结束时间的属性字段（日期类型）</div>
+                        </div>
+                    </div>
+
+                    <!-- 排程状态配置 -->
+                    <div class="card mb-3 border-info">
+                        <div class="card-header bg-info text-white">
+                            <strong><i class="fas fa-cogs"></i> 排程状态配置</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="schedule_status_property" class="form-label">排程状态属性</label>
+                                <select class="form-select" id="schedule_status_property" name="schedule_status_property">
+                                    <option value="">-- 不使用排程状态 --</option>
+                                    {% for prop_name, prop in (select_properties.items() | list) + (status_properties.items() | list) %}
+                                    <option value="{{ prop_name }}" {% if mapping.schedule_status_property == prop_name %}selected{% endif %}>
+                                        {{ prop_name }} ({{ prop.type }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">选择一个"选择"或"状态"类型的属性，用于追踪任务的排程状态</div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="schedule_status_todo_value" class="form-label">"待排程"状态值</label>
+                                        <select class="form-select" id="schedule_status_todo_value" name="schedule_status_todo_value">
+                                            {% if mapping.schedule_status_options %}
+                                                <option value="">-- 请选择 --</option>
+                                                {% for option in mapping.schedule_status_options %}
+                                                    <option value="{{ option }}" {% if mapping.schedule_status_todo_value == option %}selected{% endif %}>{{ option }}</option>
+                                                {% endfor %}
+                                            {% else %}
+                                                <option value="">-- 请先选择排程状态属性 --</option>
+                                            {% endif %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="schedule_status_done_value" class="form-label">"已排程"状态值</label>
+                                        <select class="form-select" id="schedule_status_done_value" name="schedule_status_done_value">
+                                            {% if mapping.schedule_status_options %}
+                                                <option value="">-- 请选择 --</option>
+                                                {% for option in mapping.schedule_status_options %}
+                                                    <option value="{{ option }}" {% if mapping.schedule_status_done_value == option %}selected{% endif %}>{{ option }}</option>
+                                                {% endfor %}
+                                            {% else %}
+                                                <option value="">-- 请先选择排程状态属性 --</option>
+                                            {% endif %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('connect') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left"></i> 返回系统配置
+                        </a>
+                        <button type="submit" class="btn btn-primary w-100">保存映射关系</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scheduleStatusPropertySelect = document.getElementById('schedule_status_property');
+    const todoSelect = document.getElementById('schedule_status_todo_value');
+    const doneSelect = document.getElementById('schedule_status_done_value');
+
+    scheduleStatusPropertySelect.addEventListener('change', function() {
+        const propertyName = this.value;
+        console.log('Selected property:', propertyName);
+        
+        // 清空下拉列表
+        todoSelect.innerHTML = '<option value="">-- 请选择 --</option>';
+        doneSelect.innerHTML = '<option value="">-- 请选择 --</option>';
+
+        if (propertyName) {
+            fetch(`/get_property_options/${propertyName}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        data.forEach(option => {
+                            const todoOption = new Option(option, option);
+                            const doneOption = new Option(option, option);
+                            todoSelect.add(todoOption);
+                            doneSelect.add(doneOption);
+                        });
+                    } else {
+                        console.error('Error fetching property options:', data.error);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+    });
+});
+</script>
+{% endblock %}

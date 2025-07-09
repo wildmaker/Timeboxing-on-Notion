@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}日程安排预览{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>📅 日程安排预览</h1>
+    
+    <div class="preview-summary mb-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">开始时间</h5>
+                        <p class="card-text h4">{{ start_time.strftime('%H:%M') }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">任务总数</h5>
+                        <p class="card-text h4">{{ total_tasks }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <h5 class="card-title">🧘 自动休息</h5>
+                        <p class="card-text h4">{{ rest_tasks_count }} 次</p>
+                        <small>工作45分钟后自动插入15分钟休息</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">预计结束时间</h5>
+                        <p class="card-text h4" id="estimated-end-time">计算中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <h5>📋 预览说明</h5>
+        <ul class="mb-0">
+            <li>以下是系统为您安排的日程预览</li>
+            <li>时间已自动对齐到5分钟倍数</li>
+            <li>任务按优先级排序，同级任务首尾相连</li>
+            <li>🧘 连续工作超过45分钟时会自动插入15分钟休息时间</li>
+            <li>请仔细检查后确认，确认后将同步到Notion</li>
+        </ul>
+    </div>
+
+    <div class="task-tree-container">
+        <h3>🌳 任务安排详情</h3>
+        
+        {% macro render_task_tree(tasks, level=0) %}
+            {% for task in tasks %}
+                <div class="task-item" data-level="{{ level }}">
+                    <div class="task-card mb-3" style="margin-left: {{ level * 20 }}px;">
+                        <div class="card {% if task.children %}border-primary{% else %}border-secondary{% endif %}">
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <h5 class="card-title mb-1">
+                                            {% if task.children %}
+                                                🗂️
+                                            {% else %}
+                                                📝
+                                            {% endif %}
+                                            {{ task.name or '未命名任务' }}
+                                        </h5>
+                                        <small class="text-muted">
+                                            优先级: 
+                                            <span class="badge 
+                                                {% if task.priority == 'P0' %}badge-danger
+                                                {% elif task.priority == 'P1' %}badge-warning  
+                                                {% elif task.priority == 'P2' %}badge-info
+                                                {% else %}badge-secondary{% endif %}">
+                                                {{ task.priority or '未设置' }}
+                                            </span>
+                                        </small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        {% if task.start_time and task.end_time %}
+                                            <div class="time-slot">
+                                                <strong>⏰ 时间安排</strong><br>
+                                                <span class="text-primary">
+                                                    {{ task.start_time.strftime('%H:%M') }} - 
+                                                    {{ task.end_time.strftime('%H:%M') }}
+                                                </span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-3">
+                                        {% if task.estimated_time %}
+                                            <div class="duration">
+                                                <strong>⏱️ 用时</strong><br>
+                                                <span class="text-success">{{ task.estimated_time }} 分钟</span>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                {% if task.children %}
+                                    <div class="mt-3">
+                                        <small class="text-muted">
+                                            📊 包含 {{ task.children|length }} 个子任务
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if task.children %}
+                        {{ render_task_tree(task.children, level + 1) }}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endmacro %}
+        
+        {{ render_task_tree(task_tree) }}
+    </div>
+
+    <div class="action-buttons mt-4">
+        <div class="row">
+            <div class="col-md-6">
+                <form method="post" action="{{ url_for('confirm_schedule') }}" style="display: inline;">
+                    <button type="submit" class="btn btn-success btn-lg btn-block" onclick="return confirm('确认要将此日程安排同步到Notion吗？')">
+                        ✅ 确认并同步到Notion
+                    </button>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <div class="btn-group w-100">
+                    <a href="{{ url_for('schedule') }}" class="btn btn-secondary">
+                        ↩️ 返回修改
+                    </a>
+                    <form method="post" action="{{ url_for('cancel_schedule') }}" style="display: inline;" class="flex-fill">
+                        <button type="submit" class="btn btn-outline-secondary w-100">
+                            ❌ 取消预览
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.task-item {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+}
+
+.time-slot, .duration {
+    font-size: 0.9em;
+}
+
+.preview-summary .card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.action-buttons {
+    position: sticky;
+    bottom: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+}
+</style>
+
+<script>
+// 计算预计结束时间
+document.addEventListener('DOMContentLoaded', function() {
+    const tasks = {{ json_task_tree | tojson | safe }};
+    
+    function findLatestEndTime(tasks) {
+        let latestTime = null;
+        
+        for (const task of tasks) {
+            if (task.end_time) {
+                const endTime = new Date(task.end_time);
+                if (!latestTime || endTime > latestTime) {
+                    latestTime = endTime;
+                }
+            }
+            
+            if (task.children && task.children.length > 0) {
+                const childLatest = findLatestEndTime(task.children);
+                if (childLatest && (!latestTime || childLatest > latestTime)) {
+                    latestTime = childLatest;
+                }
+            }
+        }
+        
+        return latestTime;
+    }
+    
+    const endTime = findLatestEndTime(tasks);
+    if (endTime) {
+        const hours = endTime.getHours().toString().padStart(2, '0');
+        const minutes = endTime.getMinutes().toString().padStart(2, '0');
+        document.getElementById('estimated-end-time').textContent = `${hours}:${minutes}`;
+    }
+});
+</script>
+{% endblock %} 

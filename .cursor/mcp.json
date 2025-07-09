@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "task-master-ai": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "--package=task-master-ai",
+                "task-master-ai"
+            ],
+            "env": {
+                "OPENROUTER_API_KEY": "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",
+                "OLLAMA_API_KEY": "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"
+            }
+        }
+    }
+}

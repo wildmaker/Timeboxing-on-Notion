@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}延期操作结果 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h2 class="mb-0">
+                    <i class="fas fa-check-circle"></i> 延期操作完成
+                </h2>
+            </div>
+            <div class="card-body">
+                {% if result.success %}
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-info-circle"></i> 操作摘要</h5>
+                        <p class="mb-2"><strong>{{ result.message }}</strong></p>
+                        <p class="mb-0">
+                            <small>
+                                <i class="fas fa-clock"></i> 影响任务数：{{ result.affected_tasks }}
+                            </small>
+                        </p>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h5>受影响的任务详情</h5>
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>任务类型</th>
+                                            <th>任务标题</th>
+                                            <th>原开始时间</th>
+                                            <th>新开始时间</th>
+                                            <th>原结束时间</th>
+                                            <th>新结束时间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for task in result.updated_tasks %}
+                                        <tr>
+                                            <td>
+                                                {% if task.type == '延期任务' %}
+                                                    <span class="badge bg-warning">{{ task.type }}</span>
+                                                {% elif task.type == '父任务' %}
+                                                    <span class="badge bg-info">{{ task.type }}</span>
+                                                {% elif task.type == '后续任务' %}
+                                                    <span class="badge bg-secondary">{{ task.type }}</span>
+                                                {% elif task.type == '冲突调整' %}
+                                                    <span class="badge bg-danger">{{ task.type }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-light text-dark">{{ task.type }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ task.title }}</td>
+                                            <td>
+                                                {% if task.old_start_time %}
+                                                    <small class="text-muted">{{ task.old_start_time[:16] }}</small>
+                                                {% else %}
+                                                    <small class="text-muted">-</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if task.new_start_time %}
+                                                    <small class="text-success">{{ task.new_start_time[:16] }}</small>
+                                                {% else %}
+                                                    <small class="text-muted">-</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if task.old_end_time %}
+                                                    <small class="text-muted">{{ task.old_end_time[:16] }}</small>
+                                                {% else %}
+                                                    <small class="text-muted">-</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if task.new_end_time %}
+                                                    <small class="text-success">{{ task.new_end_time[:16] }}</small>
+                                                {% else %}
+                                                    <small class="text-muted">-</small>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-chart-bar"></i> 统计信息
+                                    </h6>
+                                    <ul class="list-unstyled">
+                                        <li><strong>总受影响任务数：</strong> {{ result.affected_tasks }}</li>
+                                        <li><strong>延期任务数：</strong> {{ result.updated_tasks | selectattr('type', 'equalto', '延期任务') | list | length }}</li>
+                                        <li><strong>父任务数：</strong> {{ result.updated_tasks | selectattr('type', 'equalto', '父任务') | list | length }}</li>
+                                        <li><strong>冲突调整任务数：</strong> {{ result.updated_tasks | selectattr('type', 'equalto', '冲突调整') | list | length }}</li>
+                                        <li><strong>后续任务数：</strong> {{ result.updated_tasks | selectattr('type', 'equalto', '后续任务') | list | length }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-info-circle"></i> 操作说明
+                                    </h6>
+                                    <ul class="list-unstyled small">
+                                        <li>✅ 已处理延期任务（任务已在Notion中更新）</li>
+                                        <li>✅ 已逐层向上更新父任务的结束时间</li>
+                                        <li>✅ 已自动检测并调整有冲突的后续任务（限今天内）</li>
+                                        <li>✅ 所有更改已同步到 Notion</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle"></i> 操作失败</h5>
+                        <p>{{ result.error }}</p>
+                    </div>
+                {% endif %}
+
+                <div class="d-flex gap-2 justify-content-between mt-4">
+                    <a href="{{ url_for('delay') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> 返回延期页面
+                    </a>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="fas fa-home"></i> 返回首页
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 自动展开/收起详情
+    const toggleBtn = document.getElementById('toggleDetails');
+    const detailsDiv = document.getElementById('taskDetails');
+    
+    if (toggleBtn && detailsDiv) {
+        toggleBtn.addEventListener('click', function() {
+            if (detailsDiv.style.display === 'none') {
+                detailsDiv.style.display = 'block';
+                this.innerHTML = '<i class="fas fa-chevron-up"></i> 收起详情';
+            } else {
+                detailsDiv.style.display = 'none';
+                this.innerHTML = '<i class="fas fa-chevron-down"></i> 展开详情';
+            }
+        });
+    }
+    
+    // 添加一些动画效果
+    const badges = document.querySelectorAll('.badge');
+    badges.forEach(badge => {
+        badge.style.animationDelay = Math.random() * 0.5 + 's';
+    });
+});
+</script>
+
+<style>
+.badge {
+    animation: fadeIn 0.6s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.text-success {
+    color: #28a745 !important;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+</style>
+{% endblock %} 

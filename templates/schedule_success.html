@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}排程完成 - {{ config.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- 成功标题区域 -->
+    <div class="text-center mb-5">
+        <div class="success-icon mb-3">
+            <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+        </div>
+        <h1 class="display-4 text-success mb-2">🎉 排程完成！</h1>
+        <p class="lead text-muted">任务日程已成功安排并同步到 Notion</p>
+    </div>
+
+    <!-- 结果统计卡片 -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-8">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>排程结果统计
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <div class="statistic-item">
+                                <h2 class="text-success mb-1">{{ result.success_count }}</h2>
+                                <p class="text-muted mb-0">成功排程</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="statistic-item">
+                                <h2 class="text-info mb-1">{{ result.total_count }}</h2>
+                                <p class="text-muted mb-0">总任务数</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="statistic-item">
+                                {% set success_rate = (result.success_count / result.total_count * 100) | round(1) if result.total_count > 0 else 0 %}
+                                <h2 class="{% if success_rate == 100 %}text-success{% elif success_rate > 50 %}text-warning{% else %}text-danger{% endif %} mb-1">
+                                    {{ success_rate }}%
+                                </h2>
+                                <p class="text-muted mb-0">成功率</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 状态指示器 -->
+                    <hr>
+                    <div class="text-center">
+                        {% if result.status == 'completed' %}
+                            <span class="badge bg-success fs-6 p-2">
+                                <i class="fas fa-check me-1"></i>完全成功
+                            </span>
+                        {% elif result.status == 'partial' %}
+                            <span class="badge bg-warning fs-6 p-2">
+                                <i class="fas fa-exclamation-triangle me-1"></i>部分成功
+                            </span>
+                        {% else %}
+                            <span class="badge bg-danger fs-6 p-2">
+                                <i class="fas fa-times me-1"></i>执行失败
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 时间信息卡片 -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-clock me-2"></i>时间信息
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="time-info">
+                                <label class="form-label text-muted">排程开始时间</label>
+                                <div class="time-display">
+                                    <i class="fas fa-play text-success me-2"></i>
+                                    <span id="start-time">{{ result.start_time.strftime('%Y年%m月%d日 %H:%M') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="time-info">
+                                <label class="form-label text-muted">操作完成时间</label>
+                                <div class="time-display">
+                                    <i class="fas fa-flag-checkered text-primary me-2"></i>
+                                    <span id="completion-time">{{ result.completion_time.strftime('%Y年%m月%d日 %H:%M:%S') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作信息 -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h6 class="card-title text-muted mb-1">操作记录 ID</h6>
+                            <code class="fs-6">#{{ result.operation_id }}</code>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-database text-muted"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                <a href="{{ url_for('schedule') }}" class="btn btn-primary btn-lg me-md-2">
+                    <i class="fas fa-calendar-plus me-2"></i>再次排程
+                </a>
+                <a href="{{ url_for('schedule_history') }}" class="btn btn-outline-secondary btn-lg me-md-2">
+                    <i class="fas fa-history me-2"></i>查看历史
+                </a>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary btn-lg">
+                    <i class="fas fa-home me-2"></i>返回首页
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 温馨提示 -->
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-8">
+            <div class="alert alert-info">
+                <i class="fas fa-lightbulb me-2"></i>
+                <strong>温馨提示：</strong>
+                你的任务时间已经同步到 Notion，可以在 Notion 中查看详细的日程安排。
+                如果需要调整任务时间，请直接在 Notion 中修改或重新运行排程。
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.success-icon {
+    animation: bounce 1s ease-in-out;
+}
+
+@keyframes bounce {
+    0%, 20%, 60%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    80% {
+        transform: translateY(-5px);
+    }
+}
+
+.statistic-item {
+    padding: 1rem 0;
+    border-right: 1px solid #dee2e6;
+}
+
+.statistic-item:last-child {
+    border-right: none;
+}
+
+.time-info {
+    margin-bottom: 1rem;
+}
+
+.time-display {
+    background-color: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
+    border-left: 3px solid #007bff;
+    font-weight: 500;
+}
+
+.card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2rem;
+    }
+    
+    .statistic-item {
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+    
+    .statistic-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+}
+</style>
+
+<script>
+// 页面加载完成后的效果
+document.addEventListener('DOMContentLoaded', function() {
+    // 页面数据
+    const resultData = {
+        successCount: {{ result.success_count }},
+        totalCount: {{ result.total_count }},
+        status: '{{ result.status }}'
+    };
+    
+    // 可以添加数字递增动画等效果
+    console.log('排程完成页面加载成功', resultData);
+    
+    // 如果需要自动跳转，可以取消注释下面的代码
+    // setTimeout(function() {
+    //     window.location.href = "{{ url_for('schedule') }}";
+    // }, 5000); // 5秒后自动跳转
+});
+</script>
+{% endblock %} 

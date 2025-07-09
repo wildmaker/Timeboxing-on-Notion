@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Notion 任务自动化工具</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    自动化管理你的 Notion 任务数据库，提高工作效率！
+                </p>
+                
+                {% if config %}
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle"></i> 系统已配置完成</h5>
+                        <p>当前关联数据库：<strong>{{ config.database_id }}</strong></p>
+                        <p class="mb-0">您可以开始使用以下功能：</p>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-clock fa-3x text-primary mb-3"></i>
+                                    <h5>批量延迟任务</h5>
+                                    <p>将当天所有任务延迟指定时间</p>
+                                    <a href="{{ url_for('delay') }}" class="btn btn-primary">开始延迟</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    {% if config.is_mapping_complete_for_scheduling() %}
+                                        <i class="fas fa-calendar-alt fa-3x text-success mb-3"></i>
+                                        <h5>智能排程</h5>
+                                        <p>根据优先级和时间自动安排任务</p>
+                                        <a href="{{ url_for('schedule') }}" class="btn btn-success">开始排程</a>
+                                    {% else %}
+                                        <i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
+                                        <h5>智能排程</h5>
+                                        <p>需要先配置字段映射</p>
+                                        <a href="{{ url_for('property_mapping') }}" class="btn btn-outline-secondary">配置映射</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <a href="{{ url_for('connect') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-cog"></i> 管理配置
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <h5><i class="fas fa-exclamation-triangle"></i> 需要配置系统</h5>
+                        <p>您还没有配置 Notion 连接和数据库。</p>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h5>功能介绍</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6><i class="fas fa-clock text-primary"></i> 批量延迟任务</h6>
+                                        <p class="small mb-0">
+                                            将当天所有任务统一延迟指定的时间，支持按小时和分钟设置。
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6><i class="fas fa-calendar-alt text-success"></i> 智能排程</h6>
+                                        <p class="small mb-0">
+                                            根据任务的优先级、预估时间和依赖关系，自动安排最优的执行时间。
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('connect') }}" class="btn btn-primary btn-lg">
+                            <i class="fas fa-rocket"></i> 开始配置
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}任务延期管理 - Notion 自动化工具{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header bg-warning text-white">
+                <h2 class="mb-0">任务延期管理</h2>
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">选择需要延期的子任务</h5>
+                <p class="card-text">
+                    <strong>使用流程：</strong>
+                    <br>1. 先在Notion中手动更新延期任务的结束时间
+                    <br>2. 在下方选择该延期任务
+                    <br>3. 系统会自动检测时间冲突并更新相关任务：
+                    <br>&nbsp;&nbsp;&nbsp;&nbsp;• 逐层向上更新父任务的结束时间
+                    <br>&nbsp;&nbsp;&nbsp;&nbsp;• 自动调整有时间冲突的后续任务
+                </p>
+
+                {% if config %}
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle"></i> 当前配置</h6>
+                        <p><strong>数据库ID:</strong> {{ config.database_id }}</p>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('delay') }}" id="delayForm">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label for="task_select" class="form-label">选择延期的子任务</label>
+                                    <select class="form-select" id="task_select" name="task_id" required>
+                                        <option value="">请选择一个子任务...</option>
+                                        <!-- 子任务选项将通过JavaScript动态加载 -->
+                                    </select>
+                                    <small class="form-text text-muted">只显示叶节点任务（没有子任务的任务）</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label class="form-label">任务信息</label>
+                                    <div id="task_info" class="alert alert-light" style="display: none;">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <p><strong>任务标题：</strong> <span id="task_title">-</span></p>
+                                                <p><strong>父任务：</strong> <span id="parent_task">-</span></p>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <p><strong>当前开始时间：</strong> <span id="current_start_time">-</span></p>
+                                                <p><strong>当前结束时间：</strong> <span id="current_end_time" class="text-primary">-</span></p>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <p><strong>状态：</strong> <span class="badge bg-info">已延期</span></p>
+                                                <p><small class="text-muted">系统将自动处理相关任务</small></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 justify-content-between">
+                            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> 返回首页
+                            </a>
+                            <button type="submit" class="btn btn-warning" id="submit_btn">
+                                <i class="fas fa-clock"></i> 开始延期任务
+                            </button>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <h6><i class="fas fa-exclamation-triangle"></i> 未找到配置</h6>
+                        <p>请先配置 Notion 连接和数据库才能使用此功能。</p>
+                        <a href="{{ url_for('connect') }}" class="btn btn-primary">系统配置</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 结果展示模态框 -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">延期操作结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="result_content"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const taskSelect = document.getElementById('task_select');
+    const taskInfo = document.getElementById('task_info');
+    const form = document.getElementById('delayForm');
+    // 加载子任务列表
+    loadLeafTasks();
+    
+    // 监听任务选择变化
+    taskSelect.addEventListener('change', function() {
+        const selectedTaskId = this.value;
+        if (selectedTaskId) {
+            loadTaskDetails(selectedTaskId);
+        } else {
+            taskInfo.style.display = 'none';
+        }
+    });
+    
+    // 表单提交处理
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        
+        const selectedTaskId = taskSelect.value;
+        
+        if (!selectedTaskId) {
+            alert('请选择要处理的延期任务');
+            return;
+        }
+        
+        // 确认操作
+        if (!confirm('确定要处理选中的延期任务吗？系统将自动检测并调整所有相关的父任务和后续任务。')) {
+            return;
+        }
+        
+        // 显示加载状态
+        const submitBtn = document.getElementById('submit_btn');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 处理中...';
+        
+        // 提交表单
+        this.submit();
+    });
+    
+    async function loadLeafTasks() {
+        try {
+            const response = await fetch('/api/leaf-tasks');
+            const data = await response.json();
+            
+            if (data.success) {
+                taskSelect.innerHTML = '<option value="">请选择一个子任务...</option>';
+                data.tasks.forEach(task => {
+                    const option = document.createElement('option');
+                    option.value = task.id;
+                    option.textContent = task.title;
+                    taskSelect.appendChild(option);
+                });
+            } else {
+                alert('加载任务列表失败：' + data.error);
+            }
+        } catch (error) {
+            console.error('加载任务列表失败:', error);
+            alert('加载任务列表失败');
+        }
+    }
+    
+    async function loadTaskDetails(taskId) {
+        try {
+            const response = await fetch(`/api/task-details/${taskId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const task = data.task;
+                document.getElementById('task_title').textContent = task.title;
+                document.getElementById('current_start_time').textContent = task.start_time || '-';
+                document.getElementById('current_end_time').textContent = task.end_time || '-';
+                document.getElementById('parent_task').textContent = task.parent_task || '无';
+                
+                taskInfo.style.display = 'block';
+            } else {
+                alert('加载任务详情失败：' + data.error);
+            }
+        } catch (error) {
+            console.error('加载任务详情失败:', error);
+            alert('加载任务详情失败');
+        }
+    }
+});
+</script>
+{% endblock %}
