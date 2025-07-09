@@ -60,3 +60,6 @@ logs/
 # Migration files (keep structure but not data)
 migrations/versions/*.py
 !migrations/versions/__init__.py
+
+# Cursor
+.cursor/
