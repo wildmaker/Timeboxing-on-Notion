@@ -2314,6 +2314,18 @@ def build_task_tree_with_formatting(notion_client, config, mapping, root_tasks):
                             "title": {
                                 "does_not_contain": "🧘"  # 不包含休息任务
                             }
+                        },
+                        {
+                            "property": mapping.get('status_property'),
+                            "status": {
+                                "does_not_equal": "已完成"
+                            }
+                        },
+                        {
+                            "property": mapping.get('status_property'),
+                            "status": {
+                                "does_not_equal": "已取消"
+                            }
                         }
                     ]
                 },
